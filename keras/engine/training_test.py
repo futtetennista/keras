@@ -132,6 +132,8 @@ class TrainingTest(test_combinations.TestCase):
     model.compile('sgd', loss='mse', run_eagerly=False, jit_compile=True)
     x, y = np.ones((10, 1)), np.ones((10, 1))
     model.fit(x, y, epochs=2)
+    model.evaluate(x, y, jit_compile=True)
+    model.predict(x, jit_compile=True)
 
   @test_combinations.run_all_keras_modes(always_skip_v1=True)
   def test_verify_xla_compile_with_jit_compile(self):
@@ -153,6 +155,51 @@ class TrainingTest(test_combinations.TestCase):
                                   'Graph execution error'):
         model.fit(input_array, expected_output, epochs=1)
       model.predict(input_array)
+
+  @test_combinations.run_all_keras_modes(always_skip_v1=True)
+  def test_jit_compile_for_compile_evaluate_predict(self):
+    # Test with jit_compile = True for model.compile(), model.evaluate(),
+    # model.predict()
+    model = sequential.Sequential([layers_module.Dense(1)])
+    model.compile('sgd', loss='mse', run_eagerly=False, jit_compile=True)
+    x, y = np.ones((10, 1)), np.ones((10, 1))
+    model.fit(x, y, epochs=2)
+    model.evaluate(x, y, jit_compile=True)
+    model.predict(x, jit_compile=True)
+
+  @test_combinations.run_all_keras_modes(always_skip_v1=True)
+  def test_jit_compile_evaluate_predict(self):
+    # Test with jit_compile = True for model.evaluate(), model.predict() and
+    # jit_compile=False for model.compile()
+    model = sequential.Sequential([layers_module.Dense(1)])
+    model.compile('sgd', loss='mse', run_eagerly=False, jit_compile=False)
+    x, y = np.ones((10, 1)), np.ones((10, 1))
+    model.fit(x, y, epochs=2)
+    model.evaluate(x, y, jit_compile=True)
+    model.predict(x, jit_compile=True)
+
+  @test_combinations.run_all_keras_modes(always_skip_v1=True)
+  def test_jit_compile_evaluate_predict_default_value(self):
+    # Test with jit_compile = True for model.compile().
+    # model.predict() and model.evaluate() take the default value of jit_compile
+    # initialized in model.compile()
+    model = sequential.Sequential([layers_module.Dense(1)])
+    model.compile('sgd', loss='mse', run_eagerly=False, jit_compile=True)
+    x, y = np.ones((10, 1)), np.ones((10, 1))
+    model.fit(x, y, epochs=2)
+    model.evaluate(x, y)
+    model.predict(x)
+
+  @test_combinations.run_all_keras_modes(always_skip_v1=True)
+  def test_jit_compile_only_model_compile(self):
+    # Test with jit_compile = True for model.compile() and jit_compile=False
+    # for model.evaluate(), model.predict()
+    model = sequential.Sequential([layers_module.Dense(1)])
+    model.compile('sgd', loss='mse', run_eagerly=False, jit_compile=True)
+    x, y = np.ones((10, 1)), np.ones((10, 1))
+    model.fit(x, y, epochs=2)
+    model.evaluate(x, y, jit_compile=False)
+    model.predict(x, jit_compile=False)
 
   @test_combinations.run_all_keras_modes(always_skip_v1=True)
   def test_fit_without_loss_at_compile(self):

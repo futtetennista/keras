@@ -280,6 +280,7 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
 
     self._init_batch_counters()
     self._base_model_initialized = True
+    self._jit_compile = None
 
   @tf.__internal__.tracking.no_automatic_dependency_tracking
   def _init_batch_counters(self):
@@ -1506,6 +1507,9 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
         with tf.control_dependencies(_minimum_control_deps(outputs)):
           model._test_counter.assign_add(1)  # pylint: disable=protected-access
         return outputs
+      if self._jit_compile_evaluate:
+        run_step = tf.function(
+            run_step, jit_compile=True, experimental_relax_shapes=True)
 
       data = next(iterator)
       outputs = model.distribute_strategy.run(run_step, args=(data,))
@@ -1577,6 +1581,7 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
                workers=1,
                use_multiprocessing=False,
                return_dict=False,
+               jit_compile=None,
                **kwargs):
     """Returns the loss value & metrics values for the model in test mode.
 
@@ -1647,6 +1652,18 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
         return_dict: If `True`, loss and metric results are returned as a dict,
           with each key being the name of the metric. If `False`, they are
           returned as a list.
+        jit_compile: If `True`, model evaluate step is executed with XLA.
+          [XLA](https://www.tensorflow.org/xla) is an optimizing compiler for
+          machine learning.
+          `jit_compile` is not enabled for by default.
+          This option cannot be enabled with `run_eagerly=True`.
+          Note that `jit_compile=True` is
+          may not necessarily work for all models.
+          For more information on supported operations please refer to the
+          [XLA documentation](https://www.tensorflow.org/xla).
+          Also refer to
+          [known XLA issues](https://www.tensorflow.org/xla/known_issues) for
+          more details.
         **kwargs: Unused at this time.
 
     See the discussion of `Unpacking behavior for iterator-like inputs` for
@@ -1661,6 +1678,16 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
     Raises:
         RuntimeError: If `model.evaluate` is wrapped in a `tf.function`.
     """
+    if jit_compile:
+      if (self._run_eagerly or self.dynamic) and jit_compile:
+        raise ValueError(
+            'You cannot enable `run_eagerly` and `jit_compile` '
+            'at the same time.')
+      else:
+        self._jit_compile_evaluate = jit_compile
+    else:
+      self._jit_compile_evaluate = self._jit_compile
+
     base_layer.keras_api_gauge.get_cell('evaluate').set(True)
     version_utils.disallow_legacy_graph('Model', 'evaluate')
     self._assert_compile_was_called()
@@ -1791,6 +1818,10 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
           model._predict_counter.assign_add(1)  # pylint: disable=protected-access
         return outputs
 
+      if self._jit_compile_predict:
+        run_step = tf.function(
+            run_step, jit_compile=True, experimental_relax_shapes=True)
+
       data = next(iterator)
       outputs = model.distribute_strategy.run(run_step, args=(data,))
       outputs = reduce_per_replica(
@@ -1836,6 +1867,7 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
               callbacks=None,
               max_queue_size=10,
               workers=1,
+              jit_compile=None,
               use_multiprocessing=False):
     """Generates output predictions for the input samples.
 
@@ -1900,6 +1932,18 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
             only. Maximum number of processes to spin up when using
             process-based threading. If unspecified, `workers` will default
             to 1.
+        jit_compile: If `True`, model predict step is executed with XLA.
+          [XLA](https://www.tensorflow.org/xla) is an optimizing compiler for
+          machine learning.
+          `jit_compile` is not enabled for by default.
+          This option cannot be enabled with `run_eagerly=True`.
+          Note that `jit_compile=True` is
+          may not necessarily work for all models.
+          For more information on supported operations please refer to the
+          [XLA documentation](https://www.tensorflow.org/xla).
+          Also refer to
+          [known XLA issues](https://www.tensorflow.org/xla/known_issues) for
+          more details.
         use_multiprocessing: Boolean. Used for generator or
             `keras.utils.Sequence` input only. If `True`, use process-based
             threading. If unspecified, `use_multiprocessing` will default to
@@ -1926,6 +1970,7 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
     version_utils.disallow_legacy_graph('Model', 'predict')
     self._check_call_args('predict')
     _disallow_inside_tf_function('predict')
+    self._jit_compile_predict = jit_compile
 
     # TODO(yashkatariya): Cache model on the coordinator for faster prediction.
     # If running under PSS, then swap it with OneDeviceStrategy so that
@@ -2013,7 +2058,8 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
                          'information of where went wrong, or file a '
                          'issue/bug to `tf.keras`.')
       callbacks.on_predict_end()
-    all_outputs = tf.__internal__.nest.map_structure_up_to(batch_outputs, concat, outputs)
+    all_outputs = tf.__internal__.nest.map_structure_up_to(
+        batch_outputs, concat, outputs)
 
     # If originally PSS strategy was used, then replace it back since predict
     # is running under `OneDeviceStrategy` after the swap and once its done
@@ -2115,7 +2161,8 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
                     y=None,
                     sample_weight=None,
                     reset_metrics=True,
-                    return_dict=False):
+                    return_dict=False,
+                    jit_compile=None):
     """Test the model on a single batch of samples.
 
     Args:
@@ -2140,6 +2187,18 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
         return_dict: If `True`, loss and metric results are returned as a dict,
           with each key being the name of the metric. If `False`, they are
           returned as a list.
+        jit_compile: If `True`, model evaluate step is executed with XLA.
+          [XLA](https://www.tensorflow.org/xla) is an optimizing compiler for
+          machine learning.
+          `jit_compile` is not enabled for by default.
+          This option cannot be enabled with `run_eagerly=True`.
+          Note that `jit_compile=True` is
+          may not necessarily work for all models.
+          For more information on supported operations please refer to the
+          [XLA documentation](https://www.tensorflow.org/xla).
+          Also refer to
+          [known XLA issues](https://www.tensorflow.org/xla/known_issues) for
+          more details.
 
     Returns:
         Scalar test loss (if the model has a single output and no metrics)
@@ -2150,6 +2209,15 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
     Raises:
         RuntimeError: If `model.test_on_batch` is wrapped in a `tf.function`.
     """
+    if jit_compile:
+      if (self._run_eagerly or self.dynamic) and jit_compile:
+        raise ValueError(
+            'You cannot enable `run_eagerly` and `jit_compile` '
+            'at the same time.')
+      else:
+        self._jit_compile_evaluate = jit_compile
+    else:
+      self._jit_compile_evaluate = self._jit_compile
     self._assert_compile_was_called()
     self._check_call_args('test_on_batch')
     _disallow_inside_tf_function('test_on_batch')
@@ -2167,7 +2235,7 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
     else:
       return flatten_metrics_in_order(logs, self.metrics_names)
 
-  def predict_on_batch(self, x):
+  def predict_on_batch(self, x, jit_compile=None):
     """Returns predictions for a single batch of samples.
 
     Args:
@@ -2176,6 +2244,18 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
               model has multiple inputs).
           - A TensorFlow tensor, or a list of tensors (in case the model has
               multiple inputs).
+        jit_compile: If `True`, model predict step is excuted with XLA.
+          [XLA](https://www.tensorflow.org/xla) is an optimizing compiler for
+          machine learning.
+          `jit_compile` is not enabled for by default.
+          This option cannot be enabled with `run_eagerly=True`.
+          Note that `jit_compile=True` is
+          may not necessarily work for all models.
+          For more information on supported operations please refer to the
+          [XLA documentation](https://www.tensorflow.org/xla).
+          Also refer to
+          [known XLA issues](https://www.tensorflow.org/xla/known_issues) for
+          more details.
 
     Returns:
         Numpy array(s) of predictions.
@@ -2183,6 +2263,7 @@ class Model(base_layer.Layer, version_utils.ModelVersionSelector):
     Raises:
         RuntimeError: If `model.predict_on_batch` is wrapped in a `tf.function`.
     """
+    self._jit_compile_predict = jit_compile
     self._check_call_args('predict_on_batch')
     _disallow_inside_tf_function('predict_on_batch')
     with self.distribute_strategy.scope():

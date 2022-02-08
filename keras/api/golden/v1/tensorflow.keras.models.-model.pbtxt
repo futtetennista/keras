@@ -210,7 +210,7 @@ tf_class {
   }
   member_method {
     name: "evaluate"
-    argspec: "args=[\'self\', \'x\', \'y\', \'batch_size\', \'verbose\', \'sample_weight\', \'steps\', \'callbacks\', \'max_queue_size\', \'workers\', \'use_multiprocessing\', \'return_dict\'], varargs=None, keywords=kwargs, defaults=[\'None\', \'None\', \'None\', \'auto\', \'None\', \'None\', \'None\', \'10\', \'1\', \'False\', \'False\'], "
+    argspec: "args=[\'self\', \'x\', \'y\', \'batch_size\', \'verbose\', \'sample_weight\', \'steps\', \'callbacks\', \'max_queue_size\', \'workers\', \'use_multiprocessing\', \'return_dict\', \'jit_compile\'], varargs=None, keywords=kwargs, defaults=[\'None\', \'None\', \'None\', \'auto\', \'None\', \'None\', \'None\', \'10\', \'1\', \'False\', \'False\', \'None\'], "
   }
   member_method {
     name: "evaluate_generator"
@@ -286,7 +286,7 @@ tf_class {
   }
   member_method {
     name: "predict"
-    argspec: "args=[\'self\', \'x\', \'batch_size\', \'verbose\', \'steps\', \'callbacks\', \'max_queue_size\', \'workers\', \'use_multiprocessing\'], varargs=None, keywords=None, defaults=[\'None\', \'auto\', \'None\', \'None\', \'10\', \'1\', \'False\'], "
+    argspec: "args=[\'self\', \'x\', \'batch_size\', \'verbose\', \'steps\', \'callbacks\', \'max_queue_size\', \'workers\', \'jit_compile\', \'use_multiprocessing\'], varargs=None, keywords=None, defaults=[\'None\', \'auto\', \'None\', \'None\', \'10\', \'1\', \'None\', \'False\'], "
   }
   member_method {
     name: "predict_generator"
@@ -294,7 +294,7 @@ tf_class {
   }
   member_method {
     name: "predict_on_batch"
-    argspec: "args=[\'self\', \'x\'], varargs=None, keywords=None, defaults=None"
+    argspec: "args=[\'self\', \'x\', \'jit_compile\'], varargs=None, keywords=None, defaults=[\'None\'], "
   }
   member_method {
     name: "predict_step"
@@ -330,7 +330,7 @@ tf_class {
   }
   member_method {
     name: "test_on_batch"
-    argspec: "args=[\'self\', \'x\', \'y\', \'sample_weight\', \'reset_metrics\', \'return_dict\'], varargs=None, keywords=None, defaults=[\'None\', \'None\', \'True\', \'False\'], "
+    argspec: "args=[\'self\', \'x\', \'y\', \'sample_weight\', \'reset_metrics\', \'return_dict\', \'jit_compile\'], varargs=None, keywords=None, defaults=[\'None\', \'None\', \'True\', \'False\', \'None\'], "
   }
   member_method {
     name: "test_step"
