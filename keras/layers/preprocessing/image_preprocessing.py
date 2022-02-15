@@ -1216,6 +1216,118 @@ class RandomContrast(base_layer.BaseRandomLayer):
     return dict(list(base_config.items()) + list(config.items()))
 
 
+@keras_export('keras.layers.RandomBrightness', v1=[])
+class RandomBrightness(base_layer.BaseRandomLayer):
+  """Randomly adjust brightness for the a RGB image.
+
+    This layer will randomly increase/reduce the brightness for the input RGB
+    image. During inference time, the output will be identical to input.
+    Call the layer with training=True to adjust brightness of the input.
+
+    Note that different brightness adjustment will be apply to each the images
+    in the batch.
+
+    Args:
+        factor: Float or a list/tuple of 2 floats between -1.0 and 1.0. The
+          factor is used to determine the lower bound and upper bound of the
+          brightness adjustment. A float value will be choose randomly between
+          the limits. When -1.0 is chosen, the output image will be black, and
+          when 1.0 is chosen, the image will be fully white. When only one float
+          is provided, eg, 0.2, then -0.2 will be used for lower bound and 0.2
+          will be used for upper bound.
+        seed: integer, for fixed RNG behavior.
+    Inputs: 3D (HWC) or 4D (NHWC) tensor, with float or int dtype. The value
+      should be ranged between [0, 255].
+    Output: 3D (HWC) or 4D (NHWC) tensor with brightness adjusted based on the
+      `factor`. By default, the layer will output floats. The output value will
+      be clipped to the range `[0, 255]`, the valid range of RGB colors.
+
+    Sample usage:
+
+    ```python
+    random_bright = keras_cv.layers.RandomBrightness(factor=0.2)
+
+    # An image with shape [2, 2, 3]
+    image = [[[1, 2, 3], [4 ,5 ,6]], [[7, 8, 9], [10, 11, 12]]]
+
+    # Assume we randomly select the factor to be 0.1, then it will apply
+    # 0.1 * 255 to all the channel
+    output = random_bright(image, training=True)
+
+    # output will be int64 with 25.5 added to each channel and round down.
+    tf.Tensor([[[26.5, 27.5, 28.5]
+                [29.5, 30.5, 31.5]]
+               [[32.5, 33.5, 34.5]
+                [35.5, 36.5, 37.5]]],
+              shape=(2, 2, 3), dtype=int64)
+    ```
+  """
+  _FACTOR_VALIDATION_ERROR = (
+      'The `factor` argument should be a number (or a list of two numbers) '
+      'in the range [-1.0, 1.0]. ')
+
+  def __init__(self, factor, seed=None, **kwargs):
+    base_preprocessing_layer.keras_kpl_gauge.get_cell('RandomBrightness').set(
+        True)
+    super().__init__(seed=seed, force_generator=True, **kwargs)
+    self._set_factor(factor)
+    self._seed = seed
+
+  def _set_factor(self, factor):
+    if isinstance(factor, (tuple, list)):
+      if len(factor) != 2:
+        raise ValueError(self._FACTOR_VALIDATION_ERROR + f'Got {factor}')
+      self._check_factor_range(factor[0])
+      self._check_factor_range(factor[1])
+      self._factor = sorted(factor)
+    elif isinstance(factor, (int, float)):
+      self._check_factor_range(factor)
+      factor = abs(factor)
+      self._factor = [-factor, factor]
+    else:
+      raise ValueError(self._FACTOR_VALIDATION_ERROR + f'Got {factor}')
+
+  def _check_factor_range(self, input_number):
+    if input_number > 1.0 or input_number < -1.0:
+      raise ValueError(self._FACTOR_VALIDATION_ERROR + f'Got {input_number}')
+
+  def call(self, inputs, training=True):
+    if training:
+      return self._brightness_adjust(inputs)
+    else:
+      return inputs
+
+  def _brightness_adjust(self, images):
+    images = utils.ensure_tensor(images, self.compute_dtype)
+    rank = images.shape.rank
+    if rank == 3:
+      rgb_delta_shape = (1, 1, 1)
+    elif rank == 4:
+      # Keep only the batch dim. This will ensure to have same adjustment
+      # with in one image, but different across the images.
+      rgb_delta_shape = [tf.shape(images)[0], 1, 1, 1]
+    else:
+      raise ValueError(
+          f'Expect the input image to be rank 3 or 4. Got {images.shape}')
+    rgb_delta = self._random_generator.random_uniform(
+        shape=rgb_delta_shape,
+        minval=self._factor[0],
+        maxval=self._factor[1],
+    )
+    rgb_delta = rgb_delta * 255.0
+    rgb_delta = tf.cast(rgb_delta, images.dtype)
+    images += rgb_delta
+    return tf.clip_by_value(images, 0, 255)
+
+  def get_config(self):
+    config = {
+        'factor': self._factor,
+        'seed': self._seed,
+    }
+    base_config = super().get_config()
+    return dict(list(base_config.items()) + list(config.items()))
+
+
 @keras_export('keras.layers.RandomHeight',
               'keras.layers.experimental.preprocessing.RandomHeight')
 class RandomHeight(base_layer.BaseRandomLayer):
